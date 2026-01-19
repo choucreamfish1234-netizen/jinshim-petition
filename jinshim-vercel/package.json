@@ -1,0 +1,14 @@
+{
+  "name": "jinshim-petition",
+  "version": "1.0.0",
+  "description": "진심의 무게 - 엄벌 탄원서 작성 도우미",
+  "scripts": {
+    "dev": "vercel dev",
+    "build": "echo 'No build step required'",
+    "start": "vercel dev"
+  },
+  "dependencies": {},
+  "engines": {
+    "node": ">=18"
+  }
+}
