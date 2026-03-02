@@ -13,6 +13,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <script src="https://unpkg.com/docx@8.2.0/build/index.umd.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.portone.io/v2/browser-sdk.js"></script>
     <script>
         tailwind.config = {
             theme: {
@@ -136,7 +137,6 @@
                         <span className="text-white font-normal">3분이면 완성됩니다</span>
                     </p>
 
-                    {/* 사용량 표시 */}
                     <div className="fade-up delay-200 mb-8">
                         <div className="inline-flex items-center gap-2 bg-white/10 backdrop-blur px-4 py-2 rounded-full">
                             <Icons.Zap />
@@ -217,9 +217,8 @@
             const [selectedPlan, setSelectedPlan] = useState(null);
             const [usageInfo, setUsageInfo] = useState({ used: 0, remaining: DAILY_LIMIT, limit: DAILY_LIMIT });
 
-            const totalSteps = 5; // API 키 단계 제거로 5단계
+            const totalSteps = 5;
 
-            // 로컬 사용량 체크
             useEffect(() => {
                 const today = new Date().toISOString().split('T')[0];
                 const storageKey = `petition_usage_${today}`;
@@ -231,7 +230,6 @@
                     limit: DAILY_LIMIT
                 });
 
-                // 오래된 키 정리
                 Object.keys(localStorage).forEach(key => {
                     if (key.startsWith('petition_usage_') && !key.includes(today)) {
                         localStorage.removeItem(key);
@@ -336,27 +334,15 @@
                         
                         if (trimmed === '탄원서' || trimmed === '탄 원 서') {
                             paragraphs.push(new Paragraph({
-                                children: [new TextRun({
-                                    text: trimmed,
-                                    font: '휴먼명조',
-                                    size: 40,
-                                    bold: true,
-                                })],
+                                children: [new TextRun({ text: trimmed, font: '휴먼명조', size: 40, bold: true })],
                                 alignment: AlignmentType.CENTER,
                                 spacing: { after: 400, line: 375, lineRule: LineRuleType.AUTO },
                             }));
                         } else if (trimmed === '') {
-                            paragraphs.push(new Paragraph({
-                                children: [],
-                                spacing: { after: 200 },
-                            }));
+                            paragraphs.push(new Paragraph({ children: [], spacing: { after: 200 } }));
                         } else {
                             paragraphs.push(new Paragraph({
-                                children: [new TextRun({
-                                    text: trimmed,
-                                    font: '휴먼명조',
-                                    size: 24,
-                                })],
+                                children: [new TextRun({ text: trimmed, font: '휴먼명조', size: 24 })],
                                 spacing: { after: 120, line: 375, lineRule: LineRuleType.AUTO },
                             }));
                         }
@@ -364,11 +350,7 @@
                     
                     const doc = new Document({
                         sections: [{
-                            properties: {
-                                page: {
-                                    margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 },
-                                },
-                            },
+                            properties: { page: { margin: { top: 1440, right: 1440, bottom: 1440, left: 1440 } } },
                             children: paragraphs,
                         }],
                     });
@@ -387,17 +369,132 @@
             const shareKakao = () => {
                 const url = window.location.href;
                 if (navigator.share) {
-                    navigator.share({
-                        title: '엄벌 탄원서 - 진심의 무게',
-                        text: '탄원서 작성을 부탁드립니다.',
-                        url: url
-                    });
+                    navigator.share({ title: '엄벌 탄원서 - 진심의 무게', text: '탄원서 작성을 부탁드립니다.', url: url });
                 } else {
                     window.open(`https://story.kakao.com/share?url=${encodeURIComponent(url)}`, '_blank');
                 }
             };
 
-            // Render steps
+            // Review Modal (포트원 결제 완벽 장착)
+            const ReviewModal = () => {
+                const handlePayment = async () => {
+                    if (!selectedPlan) {
+                        alert('검토 등급을 선택해주세요');
+                        return;
+                    }
+
+                    const planData = reviewPlans.find(p => p.id === selectedPlan);
+
+                    try {
+                        const response = await window.PortOne.requestPayment({
+                            storeId: "store-6451a918-f7e0-451e-8994-83dcf09aeebe", 
+                            channelKey: "channel-key-725efda3-c2ed-4fb5-9d94-d1bbecc3097e", 
+                            paymentId: `order-${Date.now()}`,
+                            orderName: `진심의 무게 문서 템플릿 - ${planData.name}`,
+                            totalAmount: planData.price,
+                            currency: "CURRENCY_KRW",
+                            payMethod: "CARD",
+                        });
+
+                        if (response.code != null) {
+                            return alert(`결제 실패: ${response.message}`);
+                        }
+                        
+                        alert(`${planData.name} 결제가 완료되었습니다. 변호사가 곧 연락드립니다.`);
+                        setShowReviewModal(false); 
+
+                    } catch (error) {
+                        console.error("결제 모듈 에러:", error);
+                    }
+                };
+
+                return (
+                    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
+                        <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-hidden fade-in">
+                            <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
+                                <div>
+                                    <h3 className="text-lg font-bold text-gray-900">
+                                        {usageInfo.remaining <= 0 ? '무료 사용 완료' : '전문가 검토 신청'}
+                                    </h3>
+                                    <p className="text-sm text-gray-500">
+                                        {usageInfo.remaining <= 0 
+                                            ? '전문가 검토로 더 완벽한 탄원서를 받아보세요' 
+                                            : '검토 등급을 선택해주세요'}
+                                    </p>
+                                </div>
+                                <button 
+                                    onClick={() => { setShowReviewModal(false); setSelectedPlan(null); }}
+                                    className="p-2 -mr-2 text-gray-400 hover:text-gray-600"
+                                >
+                                    <Icons.Close />
+                                </button>
+                            </div>
+                            
+                            <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh]">
+                                {usageInfo.remaining <= 0 && (
+                                    <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4">
+                                        <p className="text-sm text-amber-800">
+                                            💡 오늘 무료 사용 횟수를 모두 사용하셨습니다.<br/>
+                                            전문가 검토를 통해 더 완성도 높은 탄원서를 받아보세요.
+                                        </p>
+                                    </div>
+                                )}
+
+                                {reviewPlans.map(plan => (
+                                    <button
+                                        key={plan.id}
+                                        onClick={() => setSelectedPlan(plan.id)}
+                                        className={`w-full p-4 rounded-2xl border-2 text-left transition-all btn-press relative ${
+                                            selectedPlan === plan.id
+                                                ? 'border-dark bg-dark text-white'
+                                                : 'border-gray-200 hover:border-gray-300 bg-white'
+                                        }`}
+                                    >
+                                        {plan.popular && (
+                                            <span className={`absolute -top-2 right-4 text-xs font-bold px-2 py-0.5 rounded-full ${
+                                                selectedPlan === plan.id ? 'bg-white text-dark' : 'bg-dark text-white'
+                                            }`}>
+                                                인기
+                                            </span>
+                                        )}
+                                        <div className="flex items-start justify-between">
+                                            <div>
+                                                <div className="flex items-center gap-2 mb-1">
+                                                    <span className="text-lg">{plan.badge}</span>
+                                                    <span className="font-semibold">{plan.name}</span>
+                                                </div>
+                                                <p className={`text-sm ${selectedPlan === plan.id ? 'text-white/70' : 'text-gray-500'}`}>
+                                                    {plan.desc}
+                                                </p>
+                                            </div>
+                                            <div className={`text-right ${selectedPlan === plan.id ? 'text-white' : 'text-gray-900'}`}>
+                                                <span className="text-lg font-bold">{plan.priceText}</span>
+                                            </div>
+                                        </div>
+                                    </button>
+                                ))}
+                            </div>
+                            
+                            <div className="sticky bottom-0 bg-white border-t border-gray-100 p-5 space-y-3">
+                                <button
+                                    onClick={handlePayment}
+                                    className={`w-full py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all ${
+                                        selectedPlan 
+                                            ? 'bg-dark text-white btn-press hover:bg-gray-800' 
+                                            : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+                                    }`}
+                                >
+                                    💳 결제하고 검토 신청하기
+                                </button>
+                                <p className="text-center text-xs text-gray-400">
+                                    포트원 안전 결제를 통해 진행됩니다
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                );
+            };
+
             const renderStep = () => {
                 switch(step) {
                     case 0:
@@ -405,151 +502,79 @@
                             <div className="fade-in">
                                 <h2 className="text-xl font-semibold mb-2">작성자 확인</h2>
                                 <p className="text-gray-500 text-sm mb-8">탄원서를 누가 작성하시나요?</p>
-                                
                                 <div className="space-y-3">
-                                    <button 
-                                        onClick={() => setForm({...form, isVictim: true})}
-                                        className={`w-full p-5 rounded-2xl border-2 text-left transition-all btn-press ${
-                                            form.isVictim === true 
-                                                ? 'border-dark bg-dark text-white' 
-                                                : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                    >
+                                    <button onClick={() => setForm({...form, isVictim: true})} className={`w-full p-5 rounded-2xl border-2 text-left transition-all btn-press ${form.isVictim === true ? 'border-dark bg-dark text-white' : 'border-gray-200 hover:border-gray-300'}`}>
                                         <div className="font-semibold mb-1">피해자 본인</div>
-                                        <div className={`text-sm ${form.isVictim === true ? 'text-white/70' : 'text-gray-500'}`}>
-                                            직접 탄원서를 작성합니다
-                                        </div>
+                                        <div className={`text-sm ${form.isVictim === true ? 'text-white/70' : 'text-gray-500'}`}>직접 탄원서를 작성합니다</div>
                                     </button>
-                                    
-                                    <button 
-                                        onClick={() => setForm({...form, isVictim: false})}
-                                        className={`w-full p-5 rounded-2xl border-2 text-left transition-all btn-press ${
-                                            form.isVictim === false 
-                                                ? 'border-dark bg-dark text-white' 
-                                                : 'border-gray-200 hover:border-gray-300'
-                                        }`}
-                                    >
+                                    <button onClick={() => setForm({...form, isVictim: false})} className={`w-full p-5 rounded-2xl border-2 text-left transition-all btn-press ${form.isVictim === false ? 'border-dark bg-dark text-white' : 'border-gray-200 hover:border-gray-300'}`}>
                                         <div className="font-semibold mb-1">피해자 지인</div>
-                                        <div className={`text-sm ${form.isVictim === false ? 'text-white/70' : 'text-gray-500'}`}>
-                                            피해자를 대신해 탄원서를 작성합니다
-                                        </div>
+                                        <div className={`text-sm ${form.isVictim === false ? 'text-white/70' : 'text-gray-500'}`}>피해자를 대신해 탄원서를 작성합니다</div>
                                     </button>
                                 </div>
                             </div>
                         );
-
                     case 1:
                         return (
                             <div className="fade-in">
                                 <h2 className="text-xl font-semibold mb-2">사건 정보</h2>
                                 <p className="text-gray-500 text-sm mb-8">기본적인 사건 정보를 입력해주세요</p>
-                                
                                 <div className="space-y-4">
                                     <div>
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">사건번호</label>
-                                        <input
-                                            type="text"
-                                            value={form.caseNumber}
-                                            onChange={e => setForm({...form, caseNumber: e.target.value})}
-                                            placeholder="예: 2024고단1234"
-                                            className="w-full px-4 py-3.5 bg-gray-100 rounded-xl placeholder:text-gray-400 focus:bg-gray-50 focus:ring-2 focus:ring-dark/10"
-                                        />
+                                        <input type="text" value={form.caseNumber} onChange={e => setForm({...form, caseNumber: e.target.value})} placeholder="예: 2024고단1234" className="w-full px-4 py-3.5 bg-gray-100 rounded-xl placeholder:text-gray-400 focus:bg-gray-50 focus:ring-2 focus:ring-dark/10" />
                                     </div>
-                                    
                                     <div>
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">피고인(가해자)</label>
-                                        <input
-                                            type="text"
-                                            value={form.defendant}
-                                            onChange={e => setForm({...form, defendant: e.target.value})}
-                                            placeholder="이름"
-                                            className="w-full px-4 py-3.5 bg-gray-100 rounded-xl placeholder:text-gray-400 focus:bg-gray-50 focus:ring-2 focus:ring-dark/10"
-                                        />
+                                        <input type="text" value={form.defendant} onChange={e => setForm({...form, defendant: e.target.value})} placeholder="이름" className="w-full px-4 py-3.5 bg-gray-100 rounded-xl placeholder:text-gray-400 focus:bg-gray-50 focus:ring-2 focus:ring-dark/10" />
                                     </div>
-                                    
                                     <div>
                                         <label className="text-sm font-medium text-gray-700 mb-2 block">피해자와의 관계</label>
                                         <div className="grid grid-cols-2 gap-2">
                                             {relationships.map(rel => (
-                                                <Chip 
-                                                    key={rel}
-                                                    selected={form.relationship === rel}
-                                                    onClick={() => setForm({...form, relationship: rel})}
-                                                >
-                                                    {rel}
-                                                </Chip>
+                                                <Chip key={rel} selected={form.relationship === rel} onClick={() => setForm({...form, relationship: rel})}>{rel}</Chip>
                                             ))}
                                         </div>
                                     </div>
                                 </div>
                             </div>
                         );
-
                     case 2:
                         return (
                             <div className="fade-in">
                                 <h2 className="text-xl font-semibold mb-2">피해 증상</h2>
                                 <p className="text-gray-500 text-sm mb-8">해당하는 피해를 모두 선택해주세요</p>
-                                
                                 <div className="grid grid-cols-2 gap-2">
                                     {damageOptions.map(opt => (
-                                        <Chip
-                                            key={opt.id}
-                                            selected={form.damages.includes(opt.id)}
-                                            onClick={() => toggleArray('damages', opt.id)}
-                                        >
+                                        <Chip key={opt.id} selected={form.damages.includes(opt.id)} onClick={() => toggleArray('damages', opt.id)}>
                                             <div className="font-medium">{opt.label}</div>
-                                            <div className={`text-xs mt-0.5 ${form.damages.includes(opt.id) ? 'text-white/60' : 'text-gray-400'}`}>
-                                                {opt.desc}
-                                            </div>
+                                            <div className={`text-xs mt-0.5 ${form.damages.includes(opt.id) ? 'text-white/60' : 'text-gray-400'}`}>{opt.desc}</div>
                                         </Chip>
                                     ))}
                                 </div>
                             </div>
                         );
-
                     case 3:
                         return (
                             <div className="fade-in">
                                 <h2 className="text-xl font-semibold mb-2">가해자 태도</h2>
                                 <p className="text-gray-500 text-sm mb-8">가해자의 태도를 선택해주세요 (선택사항)</p>
-                                
                                 <div className="grid grid-cols-2 gap-2">
                                     {attitudeOptions.map(opt => (
-                                        <Chip
-                                            key={opt.id}
-                                            selected={form.attitudes.includes(opt.id)}
-                                            onClick={() => toggleArray('attitudes', opt.id)}
-                                            variant="danger"
-                                        >
+                                        <Chip key={opt.id} selected={form.attitudes.includes(opt.id)} onClick={() => toggleArray('attitudes', opt.id)} variant="danger">
                                             {opt.label}
                                         </Chip>
                                     ))}
                                 </div>
                             </div>
                         );
-
                     case 4:
                         return (
                             <div className="fade-in">
                                 <h2 className="text-xl font-semibold mb-2">전하고 싶은 말</h2>
                                 <p className="text-gray-500 text-sm mb-8">판사님께 전하고 싶은 말이 있다면 적어주세요</p>
-                                
-                                <textarea
-                                    value={form.message}
-                                    onChange={e => setForm({...form, message: e.target.value})}
-                                    placeholder="선택사항입니다"
-                                    rows={5}
-                                    className="w-full px-4 py-4 bg-gray-100 rounded-xl placeholder:text-gray-400 focus:bg-gray-50 focus:ring-2 focus:ring-dark/10 resize-none"
-                                />
-                                
-                                {error && (
-                                    <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-xl text-sm">
-                                        {error}
-                                    </div>
-                                )}
-
-                                {/* 남은 횟수 표시 */}
+                                <textarea value={form.message} onChange={e => setForm({...form, message: e.target.value})} placeholder="선택사항입니다" rows={5} className="w-full px-4 py-4 bg-gray-100 rounded-xl placeholder:text-gray-400 focus:bg-gray-50 focus:ring-2 focus:ring-dark/10 resize-none" />
+                                {error && <div className="mt-4 p-4 bg-red-50 text-red-600 rounded-xl text-sm">{error}</div>}
                                 <div className="mt-4 p-3 bg-gray-50 rounded-xl flex items-center justify-between">
                                     <span className="text-sm text-gray-500">오늘 남은 무료 횟수</span>
                                     <span className="font-semibold text-dark">{usageInfo.remaining}회</span>
@@ -559,103 +584,7 @@
                 }
             };
 
-            // Review Modal
-            const ReviewModal = () => (
-                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-end sm:items-center justify-center p-0 sm:p-4">
-                    <div className="bg-white w-full sm:max-w-md sm:rounded-3xl rounded-t-3xl max-h-[90vh] overflow-hidden fade-in">
-                        <div className="sticky top-0 bg-white border-b border-gray-100 px-5 py-4 flex items-center justify-between">
-                            <div>
-                                <h3 className="text-lg font-bold text-gray-900">
-                                    {usageInfo.remaining <= 0 ? '무료 사용 완료' : '전문가 검토 신청'}
-                                </h3>
-                                <p className="text-sm text-gray-500">
-                                    {usageInfo.remaining <= 0 
-                                        ? '전문가 검토로 더 완벽한 탄원서를 받아보세요' 
-                                        : '검토 등급을 선택해주세요'}
-                                </p>
-                            </div>
-                            <button 
-                                onClick={() => { setShowReviewModal(false); setSelectedPlan(null); }}
-                                className="p-2 -mr-2 text-gray-400 hover:text-gray-600"
-                            >
-                                <Icons.Close />
-                            </button>
-                        </div>
-                        
-                        <div className="p-5 space-y-3 overflow-y-auto max-h-[60vh]">
-                            {usageInfo.remaining <= 0 && (
-                                <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl mb-4">
-                                    <p className="text-sm text-amber-800">
-                                        💡 오늘 무료 사용 횟수를 모두 사용하셨습니다.<br/>
-                                        전문가 검토를 통해 더 완성도 높은 탄원서를 받아보세요.
-                                    </p>
-                                </div>
-                            )}
-
-                            {reviewPlans.map(plan => (
-                                <button
-                                    key={plan.id}
-                                    onClick={() => setSelectedPlan(plan.id)}
-                                    className={`w-full p-4 rounded-2xl border-2 text-left transition-all btn-press relative ${
-                                        selectedPlan === plan.id
-                                            ? 'border-dark bg-dark text-white'
-                                            : 'border-gray-200 hover:border-gray-300 bg-white'
-                                    }`}
-                                >
-                                    {plan.popular && (
-                                        <span className={`absolute -top-2 right-4 text-xs font-bold px-2 py-0.5 rounded-full ${
-                                            selectedPlan === plan.id ? 'bg-white text-dark' : 'bg-dark text-white'
-                                        }`}>
-                                            인기
-                                        </span>
-                                    )}
-                                    <div className="flex items-start justify-between">
-                                        <div>
-                                            <div className="flex items-center gap-2 mb-1">
-                                                <span className="text-lg">{plan.badge}</span>
-                                                <span className="font-semibold">{plan.name}</span>
-                                            </div>
-                                            <p className={`text-sm ${selectedPlan === plan.id ? 'text-white/70' : 'text-gray-500'}`}>
-                                                {plan.desc}
-                                            </p>
-                                            <p className={`text-xs mt-1 ${selectedPlan === plan.id ? 'text-white/50' : 'text-gray-400'}`}>
-                                                ⏱ {plan.time}
-                                            </p>
-                                        </div>
-                                        <div className={`text-right ${selectedPlan === plan.id ? 'text-white' : 'text-gray-900'}`}>
-                                            <span className="text-lg font-bold">{plan.priceText}</span>
-                                        </div>
-                                    </div>
-                                </button>
-                            ))}
-                        </div>
-                        
-                        <div className="sticky bottom-0 bg-white border-t border-gray-100 p-5 space-y-3">
-                            <a
-                                href={selectedPlan ? `http://pf.kakao.com/_YxgWxcn/chat?text=${encodeURIComponent(`[탄원서 검토 신청]\n\n📋 선택 상품: ${reviewPlans.find(p => p.id === selectedPlan)?.name} (${reviewPlans.find(p => p.id === selectedPlan)?.priceText})\n📌 사건번호: ${form.caseNumber}\n📌 피고인: ${form.defendant}\n\n탄원서 파일은 별도로 전송드리겠습니다.`)}` : '#'}
-                                target="_blank"
-                                onClick={(e) => { if (!selectedPlan) { e.preventDefault(); alert('검토 등급을 선택해주세요'); } }}
-                                className={`w-full py-4 rounded-2xl font-semibold flex items-center justify-center gap-2 transition-all ${
-                                    selectedPlan 
-                                        ? 'bg-[#FEE500] text-[#191919] btn-press hover:bg-[#FDD800]' 
-                                        : 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                                }`}
-                            >
-                                <Icons.Kakao /> 카카오톡으로 신청하기
-                            </a>
-                            <p className="text-center text-xs text-gray-400">
-                                신청 후 결제 안내를 받으실 수 있습니다
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            );
-
-            // === PAGES ===
-
-            if (page === 'landing') {
-                return <Landing onStart={() => setPage('form')} usageInfo={usageInfo} />;
-            }
+            if (page === 'landing') return <Landing onStart={() => setPage('form')} usageInfo={usageInfo} />;
 
             if (page === 'result') {
                 return (
@@ -663,111 +592,49 @@
                         <div className="max-w-lg mx-auto p-5">
                             <div className="flex items-center justify-between mb-6">
                                 <h1 className="text-lg font-semibold">탄원서 완성</h1>
-                                <button 
-                                    onClick={() => { setPage('form'); setStep(0); setResult(''); }}
-                                    className="text-gray-500 text-sm"
-                                >
-                                    다시 작성
-                                </button>
+                                <button onClick={() => { setPage('form'); setStep(0); setResult(''); }} className="text-gray-500 text-sm">다시 작성</button>
                             </div>
-
                             <div className="bg-gray-50 rounded-2xl p-5 mb-6">
-                                <textarea
-                                    value={result}
-                                    onChange={e => setResult(e.target.value)}
-                                    rows={16}
-                                    className="w-full bg-transparent text-sm leading-relaxed resize-none focus:outline-none"
-                                />
+                                <textarea value={result} onChange={e => setResult(e.target.value)} rows={16} className="w-full bg-transparent text-sm leading-relaxed resize-none focus:outline-none" />
                             </div>
-
                             <div className="space-y-3">
-                                <button
-                                    onClick={saveAsDocx}
-                                    className="w-full py-4 rounded-2xl font-semibold bg-dark text-white flex items-center justify-center gap-2 btn-press hover:bg-gray-800"
-                                >
-                                    <Icons.Download /> 한글파일로 저장 (.docx)
-                                </button>
-
-                                <button
-                                    onClick={shareKakao}
-                                    className="w-full py-4 rounded-2xl font-semibold bg-[#FEE500] text-[#191919] flex items-center justify-center gap-2 btn-press hover:bg-[#FDD800]"
-                                >
-                                    <Icons.Kakao /> 카카오톡으로 공유
-                                </button>
-
+                                <button onClick={saveAsDocx} className="w-full py-4 rounded-2xl font-semibold bg-dark text-white flex items-center justify-center gap-2 btn-press hover:bg-gray-800"><Icons.Download /> 한글파일로 저장 (.docx)</button>
+                                <button onClick={shareKakao} className="w-full py-4 rounded-2xl font-semibold bg-[#FEE500] text-[#191919] flex items-center justify-center gap-2 btn-press hover:bg-[#FDD800]"><Icons.Kakao /> 카카오톡으로 공유</button>
                                 <div className="pt-4 border-t border-gray-100 mt-6">
-                                    <p className="text-center text-gray-500 text-sm mb-3">
-                                        전문가 검토로 더 완벽하게
-                                    </p>
-                                    <button
-                                        onClick={() => setShowReviewModal(true)}
-                                        className="w-full py-4 rounded-2xl font-semibold border-2 border-dark text-dark flex items-center justify-center gap-2 btn-press hover:bg-gray-50"
-                                    >
-                                        <Icons.Shield /> 변호사 검토 받기
-                                    </button>
+                                    <p className="text-center text-gray-500 text-sm mb-3">전문가 검토로 더 완벽하게</p>
+                                    <button onClick={() => setShowReviewModal(true)} className="w-full py-4 rounded-2xl font-semibold border-2 border-dark text-dark flex items-center justify-center gap-2 btn-press hover:bg-gray-50"><Icons.Shield /> 변호사 검토 받기</button>
                                 </div>
                             </div>
-
                             {showReviewModal && <ReviewModal />}
-
                             <footer className="mt-12 pt-6 border-t border-gray-100 text-center">
-                                <p className="text-xs text-gray-400">
-                                    법률 자문 협력: 법률사무소 로앤이
-                                </p>
-                                <p className="text-xs text-gray-300 mt-1">
-                                    본 서비스는 참고용이며 법적 효력을 보장하지 않습니다
-                                </p>
+                                <p className="text-xs text-gray-400">법률 자문 협력: 법률사무소 로앤이</p>
+                                <p className="text-xs text-gray-300 mt-1">본 서비스는 참고용이며 법적 효력을 보장하지 않습니다</p>
                             </footer>
                         </div>
                     </div>
                 );
             }
 
-            // Form page
             return (
                 <div className="min-h-screen bg-white">
                     <div className="max-w-lg mx-auto p-5">
                         <div className="flex items-center justify-between mb-6">
-                            <button 
-                                onClick={() => step > 0 ? setStep(step - 1) : setPage('landing')}
-                                className="p-2 -ml-2 text-gray-600"
-                            >
-                                <Icons.ArrowLeft />
-                            </button>
+                            <button onClick={() => step > 0 ? setStep(step - 1) : setPage('landing')} className="p-2 -ml-2 text-gray-600"><Icons.ArrowLeft /></button>
                             <span className="text-sm text-gray-400">{step + 1} / {totalSteps}</span>
                             <div className="w-9"></div>
                         </div>
-
                         <Progress step={step} total={totalSteps} />
-
                         {renderStep()}
-
                         <div className="mt-8">
                             {step < totalSteps - 1 ? (
-                                <button
-                                    onClick={() => setStep(step + 1)}
-                                    disabled={!canProceed()}
-                                    className="w-full py-4 rounded-2xl font-semibold bg-dark text-white disabled:bg-gray-200 disabled:text-gray-400 flex items-center justify-center gap-2 btn-press transition-colors"
-                                >
-                                    다음 <Icons.ArrowRight />
-                                </button>
+                                <button onClick={() => setStep(step + 1)} disabled={!canProceed()} className="w-full py-4 rounded-2xl font-semibold bg-dark text-white disabled:bg-gray-200 disabled:text-gray-400 flex items-center justify-center gap-2 btn-press transition-colors">다음 <Icons.ArrowRight /></button>
                             ) : (
-                                <button
-                                    onClick={generate}
-                                    disabled={loading}
-                                    className="w-full py-4 rounded-2xl font-semibold bg-dark text-white disabled:bg-gray-400 flex items-center justify-center gap-2 btn-press"
-                                >
-                                    {loading ? <><Icons.Loader /> 작성 중...</> : '탄원서 생성하기'}
-                                </button>
+                                <button onClick={generate} disabled={loading} className="w-full py-4 rounded-2xl font-semibold bg-dark text-white disabled:bg-gray-400 flex items-center justify-center gap-2 btn-press">{loading ? <><Icons.Loader /> 작성 중...</> : '탄원서 생성하기'}</button>
                             )}
                         </div>
-
                         {showReviewModal && <ReviewModal />}
-
                         <footer className="mt-12 pt-6 border-t border-gray-100 text-center">
-                            <p className="text-xs text-gray-300">
-                                법률 자문 협력: 법률사무소 로앤이
-                            </p>
+                            <p className="text-xs text-gray-300">법률 자문 협력: 법률사무소 로앤이</p>
                         </footer>
                     </div>
                 </div>
